@@ -1,0 +1,7 @@
+#+TITLE: Maubot N8n
+
+Bridge Matrix conversations to n8n workflows with intelligent agent
+capabilities. This is a [[https://github.com/maubot/maubot][maubot]] plugin that seamlessly connects Matrix chat
+messages to [[https://n8n.io][n8n]] workflows, enabling you to build powerful conversational agents,
+automation assistants, and AI-powered bots that can respond intelligently to
+user messages.
