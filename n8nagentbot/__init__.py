@@ -33,7 +33,7 @@ class N8nAgentBot(Plugin):
         """Handle incoming messages and forward to n8n agent."""
 
         # Get the message content
-        message = evt.content.body
+        message = str(evt.content.body)
 
         # Prepare payload for n8n
         payload = {
@@ -51,7 +51,7 @@ class N8nAgentBot(Plugin):
             self.log.debug(f"Sending message to n8n: {message[:50]}...")
 
             async with aiohttp.ClientSession() as session:
-                async with session.post(webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                async with session.get(webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
                     if resp.status == 200:
                         self.log.info(f"Successfully triggered n8n agent for message from {evt.sender}")
                         # n8n will handle sending the response back to Matrix
