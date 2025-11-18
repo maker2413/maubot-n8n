@@ -1,7 +1,7 @@
 from typing import Type
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command, event
-from mautrix.types import EventType
+from mautrix.types import EventType, MessageType
 from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
 import aiohttp
 
@@ -9,6 +9,8 @@ import aiohttp
 class Config(BaseProxyConfig):
     def do_update(self, helper: ConfigUpdateHelper) -> None:
         helper.copy("n8n_webhook_url")
+        helper.copy("enable_whitelist")
+        helper.copy("whitelist_users")
         helper.copy("trigger_on_mention")
         helper.copy("trigger_on_dm")
         helper.copy("trigger_command")
@@ -24,48 +26,62 @@ class N8nAgentBot(Plugin):
     def get_config_class(cls) -> Type[BaseProxyConfig]:
         return Config
 
-    @command.new("hello")
-    async def hello_world(self, evt: MessageEvent) -> None:
-        await evt.reply("Hello, World!")
+    async def _check_whitelist(self, evt: MessageEvent) -> bool:
+        if not self.config["enable_whitelist"]:
+            return True
+
+        if evt.sender in self.config["whitelist_users"]:
+            return True
+
+        return False
+
+    async def _should_process_message(self, evt: MessageEvent) -> bool:
+        """Determine if this message should trigger the agent."""
+        # Ignore our own messages
+        if evt.sender == self.client.mxid:
+            return False
+
+        # Only process text messages
+        if evt.content.msgtype != MessageType.TEXT:
+            return False
+
+        #Check whitelist
+        if not await self._check_whitelist(evt):
+            return False
+
+        message = evt.content.body
+
+        # Check if it starts with the trigger command
+        if self.config["trigger_command"] and message.startswith(self.config["trigger_command"]):
+            return True
+
+        # Check if we're in a DM (room with only 2 members)
+        if self.config["trigger_on_dm"]:
+            try:
+                members = await self.client.get_joined_members(evt.room_id)
+                if len(members) == 2:
+                    return True
+            except Exception as e:
+                self.log.warning(f"Failed to get room members: {e}")
+
+        # Check if bot was mentioned
+        if self.config["trigger_on_mention"]:
+            bot_mention = self.client.mxid
+            if bot_mention in message:
+                return True
+
+        return False
 
     @event.on(EventType.ROOM_MESSAGE)
     async def message_handler(self, evt: MessageEvent) -> None:
         """Handle incoming messages and forward to n8n agent."""
 
-        # Get the message content
-        message = str(evt.content.body)
+        self.log.debug("****CONTENT****")
+        self.log.debug(evt.content)
 
-        # Prepare payload for n8n
-        payload = {
-            "message": message,
-            "sender": evt.sender,
-            "sender_name": evt.content.get("body", "Unknown"),
-            "room_id": evt.room_id,
-            "event_id": evt.event_id,
-            "timestamp": evt.timestamp,
-        }
+        if not await self._should_process_message(evt):
+            self.log.debug("****Not Processing****")
+            return
 
-        # Send to n8n webhook
-        try:
-            webhook_url = self.config["n8n_webhook_url"]
-            self.log.debug(f"Sending message to n8n: {message[:50]}...")
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
-                    if resp.status == 200:
-                        self.log.info(f"Successfully triggered n8n agent for message from {evt.sender}")
-                        # n8n will handle sending the response back to Matrix
-                    else:
-                        error_text = await resp.text()
-                        self.log.error(f"n8n webhook returned status {resp.status}: {error_text}")
-                        await evt.respond(f"⚠️ Agent error: Received status {resp.status} from workflow")
-        except aiohttp.ClientError as e:
-            self.log.error(f"Network error calling n8n webhook: {e}")
-            await evt.respond("⚠️ Agent error: Unable to reach workflow service")
-        except Exception as e:
-            self.log.error(f"Unexpected error calling n8n webhook: {e}")
-            await evt.respond(f"⚠️ Agent error: {str(e)}")
-        finally:
-            # Stop typing indicator
-            if self.config["send_typing"]:
-                await self.client.set_typing(evt.room_id, typing=False)
+        self.log.debug("****Made it here!****")
+        return
