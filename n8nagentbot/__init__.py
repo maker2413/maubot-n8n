@@ -4,6 +4,7 @@ from maubot.handlers import command, event
 from mautrix.types import EventType, MessageType
 from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
 import aiohttp
+import time
 
 
 class Config(BaseProxyConfig):
@@ -76,12 +77,29 @@ class N8nAgentBot(Plugin):
     async def message_handler(self, evt: MessageEvent) -> None:
         """Handle incoming messages and forward to n8n agent."""
 
-        self.log.debug("****CONTENT****")
-        self.log.debug(evt.content)
-
         if not await self._should_process_message(evt):
-            self.log.debug("****Not Processing****")
             return
 
+        await evt.mark_read()
+        message = evt.content.body
+
+        # Send typing indicator if enabled
+        if self.config["send_typing"]:
+            await self.client.set_typing(evt.room_id, timeout=30000)
+
         self.log.debug("****Made it here!****")
+        time.sleep(3)
+
+        if self.config["send_typing"]:
+            await self.client.set_typing(evt.room_id, timeout=0)
+
         return
+
+    def get_trigger_command(self) -> str:
+        return self.config["trigger_command"]
+
+    @command.new(name=get_trigger_command, help="Command to trigger agent")
+    async def trigger_agent(self, evt: MessageEvent) -> None:
+        """Trigger agent with trigger command."""
+        #self.message_handler(self, evt)
+        await evt.respond("Hello world!")

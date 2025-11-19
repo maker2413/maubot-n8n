@@ -15,8 +15,7 @@ trigger_on_mention: true
 trigger_on_dm: true
 
 # Command prefix to trigger the agent (e.g., "!agent how do I...?")
-# Set to empty string or null to disable command triggering
-trigger_command: "!agent"
+trigger_command: "agent"
 
 # Send typing indicator while waiting for n8n response
 send_typing: true
