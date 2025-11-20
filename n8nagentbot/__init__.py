@@ -52,18 +52,22 @@ class N8nAgentBot(Plugin):
 
         # Ignore our own messages
         if evt.sender == self.client.mxid:
+            self.log.debug("Own message, not processing!")
             return False
 
         # Only process text messages
         if evt.content.msgtype != MessageType.TEXT:
+            self.log.debug("Message not text, not processing!")
             return False
 
         #Check whitelist
         if not await self._check_whitelist(evt):
+            self.log.debug("Not Passing whitelist, not processing!")
             return False
 
         message = evt.content.body
         if not isinstance(message, str):
+            self.log.debug("Message not string, not processing!")
             return False
 
         # Check if it starts with the trigger command
@@ -71,8 +75,13 @@ class N8nAgentBot(Plugin):
             trigger = self.config["trigger_command"]
 
             if isinstance(trigger, str):
-                if message.startswith(trigger):
+                if message.lower().startswith(trigger):
                     return True
+
+                self.log.debug("Trigger command not found, not processing!", trigger)
+            else:
+                self.log.debug("Trigger not string, not processing!", trigger)
+
 
         # Check if we're in a DM (room with only 2 members)
         if self.config["trigger_on_dm"]:
@@ -89,6 +98,8 @@ class N8nAgentBot(Plugin):
             if bot_mention in message:
                 return True
 
+        self.log.debug("No proper conditions found, not processing")
+
         return False
 
 
@@ -97,11 +108,13 @@ class N8nAgentBot(Plugin):
             await evt.respond("⚠️ Agent error: config not found!")
             return
 
+        sender = evt.sender
+
         # Prepare payload for n8n
         payload = {
             "message": msg,
-            "sender": evt.sender,
-            "sender_name": evt.content.get("body", "Unknown"),
+            "sender": sender,
+            "sender_name": sender.split(":")[0][1:],
             "room_id": evt.room_id,
             "event_id": evt.event_id,
             "timestamp": evt.timestamp,
@@ -113,7 +126,7 @@ class N8nAgentBot(Plugin):
             self.log.debug(f"Sending message to n8n: {msg[:50]}...")
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                async with session.get(webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=60))as resp:
                     if resp.status == 200:
                         self.log.info(f"Successfully triggered n8n agent for message from {evt.sender}")
                         # n8n will handle sending the response back to Matrix
@@ -138,11 +151,14 @@ class N8nAgentBot(Plugin):
             await evt.respond("⚠️ Agent error: config not found!")
             return
 
+        self.log.debug("Checking if message should be processed...")
+
         if not await self._should_process_message(evt):
             return
 
         await evt.mark_read()
         message = evt.content.body
+        self.log.debug(f"Processing message:{evt.content.body}...")
 
         if not isinstance(message, str):
             return
