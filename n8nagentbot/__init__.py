@@ -1,4 +1,4 @@
-from typing import Any, Type
+from typing import Type
 import aiohttp
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command, event
@@ -175,10 +175,6 @@ class N8nAgentBot(Plugin):
             await self.client.set_typing(evt.room_id, timeout=30000)
 
         await self._trigger_workflow(message, evt)
-
-        # Stop typing indicator
-        if self.config["send_typing"]:
-            await self.client.set_typing(evt.room_id, timeout=0)
 
         return
 
